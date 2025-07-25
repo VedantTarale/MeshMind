@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,11 +12,16 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { UserPlus, Wallet } from "lucide-react"
 
+import { useWriteContract } from "wagmi"
+import { contractABI as abi} from "@/constants/abi"
+import { contractAddress } from "@/constants/contractAddress"
+
 export default function RegisterPage() {
+  const { writeContract } = useWriteContract();
+  const router = useRouter();
   const [formData, setFormData] = useState({
     username: "",
-    contactInfo: "",
-    email: "",
+    contactInfo: ""
   })
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
@@ -23,15 +29,35 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-
-    // Simulate registration process
-    setTimeout(() => {
+    try {
+      await writeContract({
+        abi,
+        address: contractAddress,
+        functionName: "registerUser",
+        args: [formData.username, formData.contactInfo],
+      });
+      console.log(formData);
+      
+      // Show success toast
       toast({
-        title: "Registration Successful!",
-        description: "Your account has been created. You can now start using the platform.",
+        title: "Registration Successful",
+        description: "Your account has been created successfully!",
+        variant: "default",
       })
+      
+      // Redirect to profile page
+      router.push("/profile");
+      
+    } catch (error) {
+      console.error("Error registering user:", error)
+      toast({
+        title: "Registration Failed",
+        description: "There was an error registering your account. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
       setIsLoading(false)
-    }, 2000)
+    }
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -72,19 +98,6 @@ export default function RegisterPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="your.email@example.com"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="contactInfo">Contact Information</Label>
                 <Textarea
                   id="contactInfo"
@@ -113,12 +126,6 @@ export default function RegisterPage() {
             </form>
           </CardContent>
         </Card>
-
-        <div className="mt-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            By registering, you agree to our Terms of Service and Privacy Policy
-          </p>
-        </div>
       </div>
     </div>
   )

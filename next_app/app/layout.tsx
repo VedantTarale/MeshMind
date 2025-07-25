@@ -11,9 +11,8 @@ import { Providers } from './providers';
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "ComputeNet - Decentralized Compute Marketplace",
+  title: "MeshMind - Decentralized Compute Marketplace",
   description: "Rent and share computing power globally on a secure blockchain platform",
-    generator: 'v0.dev'
 }
 
 export default function RootLayout({

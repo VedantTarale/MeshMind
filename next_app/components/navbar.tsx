@@ -61,7 +61,9 @@ export function Navbar() {
 
         <div className="flex items-center gap-4">
           <ThemeToggle />
-
+          <div className="text-center">
+            <CustomConnectButton />
+          </div>
           {isConnected ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -109,10 +111,7 @@ export function Navbar() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <div className="text-center">
-
-              <CustomConnectButton />
-            </div>
+            <></>
           )}
 
           <Sheet>

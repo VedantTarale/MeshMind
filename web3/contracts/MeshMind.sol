@@ -3,32 +3,27 @@ pragma solidity ^0.8.0;
 
 import "./TokenTransfer.sol";
 
-contract DeviceManagement {
+contract MeshMind {
     enum OrderStatus {
-        PENDING,
-        ACCEPTED,
         IN_PROGRESS,
         COMPLETED,
-        CANCELLED,
-        DISPUTED
+        CANCELLED
     }
 
     struct UserProfile {
         string username;
         string contactInfo;
         bool isRegistered;
-        uint256 reputation; // 0-1000 scale
     }
 
     struct Device {
         string deviceName;
-        string metadataURI;
+        string deviceIP;
         address owner;
-        bool isRegistered;
         bool isActive;
+        bool isReady; // New field to track if device is ready to accept orders
         uint256 pricePerHour;
         string[] capabilities;
-        uint256 reputation; // 0-1000 scale
         uint256 totalOrders;
         uint256 completedOrders;
     }
@@ -40,6 +35,7 @@ contract DeviceManagement {
         uint256 deviceId;
         uint256 amount; // Paid amount
         uint256 timestamp;
+        string publicKey;
         OrderStatus status;
         uint256 completionTimestamp;
         uint256 durationHours;
@@ -51,8 +47,13 @@ contract DeviceManagement {
 
     // State variables
     address public admin;
+    address public automationBot; // Bot authorized for automated operations
     uint256 public nextDeviceId;
     uint256 public nextOrderId;
+    uint256 public botRewardPercentage = 5; // 5% of order amount as bot reward
+    
+    // Gas compensation for bot operations
+    uint256 public gasCompensation = 0.001 ether; // Fixed gas compensation in ETH
 
     // Mappings
     mapping(address => UserProfile) public users;
@@ -66,32 +67,36 @@ contract DeviceManagement {
 
     // Events
     event UserRegistered(address indexed user, string username, string contactInfo);
-    event DeviceRegistered(uint256 indexed deviceId, address indexed owner, string deviceName, string metadataURI);
+    event DeviceRegistered(uint256 indexed deviceId, address indexed owner, string deviceName, string deviceIP);
     event DeviceStatusUpdated(uint256 indexed deviceId, bool isActive);
+    event DeviceReadinessUpdated(uint256 indexed deviceId, bool isReady);
     event DevicePriceUpdated(uint256 indexed deviceId, uint256 newPrice);
     event OrderPlaced(uint256 indexed orderId, address indexed user, uint256 indexed deviceId, string action, uint256 amount);
-    event OrderAccepted(uint256 indexed orderId, address indexed deviceOwner);
+    event OrderAutoAccepted(uint256 indexed orderId, address indexed deviceOwner);
     event OrderStarted(uint256 indexed orderId);
-    event OrderCompleted(uint256 indexed orderId);
+    event OrderCompleted(uint256 indexed orderId, uint256 paymentAmount);
+    event OrderAutoCompleted(uint256 indexed orderId, address indexed bot, uint256 botReward);
     event OrderCancelled(uint256 indexed orderId, string reason);
     event OrderDisputed(uint256 indexed orderId, string reason);
     event PaymentReleased(uint256 indexed orderId, address indexed recipient, uint256 amount);
     event ReputationUpdated(address indexed user, uint256 newReputation);
     event DeviceReputationUpdated(uint256 indexed deviceId, uint256 newReputation);
+    event BotUpdated(address indexed oldBot, address indexed newBot);
+    event BotRewardUpdated(uint256 oldReward, uint256 newReward);
 
     // Modifiers
     modifier onlyAdmin() {
         require(msg.sender == admin, "Only admin");
         _;
     }
-
-    modifier userExists(address user) {
-        require(users[user].isRegistered, "User not registered");
+    
+    modifier onlyBot() {
+        require(msg.sender == automationBot, "Only automation bot");
         _;
     }
-
-    modifier deviceExists(uint256 deviceId) {
-        require(devices[deviceId].isRegistered, "Device not registered");
+    
+    modifier userExists(address user) {
+        require(users[user].isRegistered, "User not registered");
         _;
     }
 
@@ -114,9 +119,17 @@ contract DeviceManagement {
         _;
     }
 
-    constructor(address _tokenContract) {
+    constructor(address _tokenContract, address _automationBot) {
         admin = msg.sender;
         tokenContract = TokenTransfer(_tokenContract);
+        automationBot = _automationBot;
+    }
+
+    // Bot Management Functions
+    function setAutomationBot(address _newBot) external onlyAdmin {
+        address oldBot = automationBot;
+        automationBot = _newBot;
+        emit BotUpdated(oldBot, _newBot);
     }
 
     // User Management
@@ -124,14 +137,14 @@ contract DeviceManagement {
         require(!users[msg.sender].isRegistered, "Already registered");
         require(bytes(username).length > 0, "Username cannot be empty");
 
-        users[msg.sender] = UserProfile(username, contactInfo, true, 500); // Start with neutral reputation
+        users[msg.sender] = UserProfile(username, contactInfo, true);
         emit UserRegistered(msg.sender, username, contactInfo);
     }
 
     // Device Management
     function registerDevice(
         string memory deviceName,
-        string memory metadataURI,
+        string memory deviceIP,
         uint256 pricePerHour,
         string[] memory capabilities
     ) external userExists(msg.sender) {
@@ -142,17 +155,16 @@ contract DeviceManagement {
 
         Device storage newDevice = devices[deviceId];
         newDevice.deviceName = deviceName;
-        newDevice.metadataURI = metadataURI;
+        newDevice.deviceIP = deviceIP;
         newDevice.owner = msg.sender;
-        newDevice.isRegistered = true;
         newDevice.isActive = true;
+        newDevice.isReady = true;
         newDevice.pricePerHour = pricePerHour;
         newDevice.capabilities = capabilities;
-        newDevice.reputation = 500; // Start with neutral reputation
 
         userDevices[msg.sender].push(deviceId);
 
-        emit DeviceRegistered(deviceId, msg.sender, deviceName, metadataURI);
+        emit DeviceRegistered(deviceId, msg.sender, deviceName, deviceIP);
     }
 
     function updateDeviceStatus(uint256 deviceId, bool isActive)
@@ -161,6 +173,14 @@ contract DeviceManagement {
     {
         devices[deviceId].isActive = isActive;
         emit DeviceStatusUpdated(deviceId, isActive);
+    }
+
+    function updateDeviceReadiness(uint256 deviceId, bool isReady)
+        external
+        onlyDeviceOwner(deviceId)
+    {
+        devices[deviceId].isReady = isReady;
+        emit DeviceReadinessUpdated(deviceId, isReady);
     }
 
     function updateDevicePricing(uint256 deviceId, uint256 newPrice)
@@ -184,11 +204,13 @@ contract DeviceManagement {
         uint256 deviceId,
         string memory action,
         uint256 durationHours,
-        string memory taskDetails
-    ) external userExists(msg.sender) deviceExists(deviceId) {
+        string memory taskDetails,
+        string memory publicKey
+    ) external userExists(msg.sender) {
         require(devices[deviceId].isActive, "Device is not active");
-        require(devices[deviceId].owner != msg.sender, "Cannot order from own device");
+        require(devices[deviceId].isReady, "Device is not ready to accept orders");
         require(durationHours > 0, "Duration must be greater than 0");
+        require(bytes(publicKey).length > 0, "Public key cannot be empty");
 
         uint256 totalCost = devices[deviceId].pricePerHour * durationHours;
         require(tokenContract.balanceOf(msg.sender) >= totalCost, "Insufficient token balance");
@@ -207,8 +229,9 @@ contract DeviceManagement {
             deviceId: deviceId,
             amount: totalCost,
             timestamp: block.timestamp,
-            status: OrderStatus.PENDING,
-            completionTimestamp: 0,
+            publicKey: publicKey,
+            status: OrderStatus.IN_PROGRESS,
+            completionTimestamp: block.timestamp + (durationHours * 1 hours),
             durationHours: durationHours,
             taskDetails: taskDetails
         });
@@ -216,51 +239,63 @@ contract DeviceManagement {
         orderEscrow[orderId] = totalCost;
         deviceOrders[deviceId].push(orderId);
         userOrders[msg.sender].push(orderId);
+        
+        // Update device stats and set device as not ready
+        devices[deviceId].totalOrders++;
+        devices[deviceId].isReady = false;
 
         emit OrderPlaced(orderId, msg.sender, deviceId, action, totalCost);
-    }
-
-    function acceptOrder(uint256 orderId)
-        external
-        onlyDeviceOwner(orders[orderId].deviceId)
-        validOrderStatus(orderId, OrderStatus.PENDING)
-    {
-        orders[orderId].status = OrderStatus.ACCEPTED;
-        emit OrderAccepted(orderId, msg.sender);
-    }
-
-    function startOrder(uint256 orderId)
-        external
-        onlyDeviceOwner(orders[orderId].deviceId)
-        validOrderStatus(orderId, OrderStatus.ACCEPTED)
-    {
-        orders[orderId].status = OrderStatus.IN_PROGRESS;
+        emit OrderAutoAccepted(orderId, devices[deviceId].owner);
         emit OrderStarted(orderId);
+        emit DeviceReadinessUpdated(deviceId, false);
     }
 
-    function completeOrder(uint256 orderId)
+    // Automated completion by bot when time expires
+    function autoCompleteOrder(uint256 orderId)
         external
-        onlyDeviceOwner(orders[orderId].deviceId)
+        onlyBot
         validOrderStatus(orderId, OrderStatus.IN_PROGRESS)
     {
         Order storage order = orders[orderId];
+        require(block.timestamp >= order.completionTimestamp, "Order not yet expired");
+
         order.status = OrderStatus.COMPLETED;
-        order.completionTimestamp = block.timestamp;
+        
+        uint256 deviceId = order.deviceId;
+        devices[deviceId].completedOrders++;
 
-        // Calculate payments
-        uint256 escrowAmount = orderEscrow[orderId];
-        uint256 deviceOwnerPayment = escrowAmount;
+        uint256 totalAmount = orderEscrow[orderId];
+        uint256 botReward = (totalAmount * botRewardPercentage) / 100;
+        uint256 deviceOwnerPayment = totalAmount - botReward;
 
-        // Release payments
+        // Clear escrow
         orderEscrow[orderId] = 0;
-        require(tokenContract.transfer(devices[order.deviceId].owner, deviceOwnerPayment), "Payment to device owner failed");
 
-        // Update device statistics
-        devices[order.deviceId].totalOrders++;
-        devices[order.deviceId].completedOrders++;
+        // Transfer bot reward
+        if (botReward > 0) {
+            require(
+                tokenContract.transfer(automationBot, botReward),
+                "Bot reward transfer failed"
+            );
+        }
 
-        emit OrderCompleted(orderId);
-        emit PaymentReleased(orderId, devices[order.deviceId].owner, deviceOwnerPayment);
+        // Transfer payment to device owner
+        require(
+            tokenContract.transfer(devices[deviceId].owner, deviceOwnerPayment),
+            "Payment to device owner failed"
+        );
+
+        // Compensate bot for gas (if contract has ETH balance)
+        if (address(this).balance >= gasCompensation) {
+            payable(automationBot).transfer(gasCompensation);
+        }
+
+        // Set device back to ready state after completion
+        devices[deviceId].isReady = true;
+
+        emit OrderAutoCompleted(orderId, automationBot, botReward);
+        emit PaymentReleased(orderId, devices[deviceId].owner, deviceOwnerPayment);
+        emit DeviceReadinessUpdated(deviceId, true);
     }
 
     function cancelOrder(uint256 orderId, string memory reason)
@@ -269,11 +304,17 @@ contract DeviceManagement {
     {
         OrderStatus currentStatus = orders[orderId].status;
         require(
-            currentStatus == OrderStatus.PENDING || currentStatus == OrderStatus.ACCEPTED,
+            currentStatus == OrderStatus.IN_PROGRESS,
             "Cannot cancel order in current status"
         );
 
         orders[orderId].status = OrderStatus.CANCELLED;
+
+        // Set device back to ready if order was in progress
+        if (currentStatus == OrderStatus.IN_PROGRESS) {
+            devices[orders[orderId].deviceId].isReady = true;
+            emit DeviceReadinessUpdated(orders[orderId].deviceId, true);
+        }
 
         // Refund the user
         uint256 refundAmount = orderEscrow[orderId];
@@ -283,8 +324,33 @@ contract DeviceManagement {
         emit OrderCancelled(orderId, reason);
     }
 
+    // Function to get orders that are ready for auto-completion
+    function getExpiredOrders() external view returns (uint256[] memory) {
+        uint256[] memory expiredOrders = new uint256[](nextOrderId);
+        uint256 count = 0;
+
+        for (uint256 i = 1; i <= nextOrderId; i++) {
+            if (orders[i].status == OrderStatus.IN_PROGRESS && 
+                block.timestamp >= orders[i].completionTimestamp) {
+                expiredOrders[count] = i;
+                count++;
+            }
+        }
+
+        // Resize array to actual count
+        uint256[] memory result = new uint256[](count);
+        for (uint256 i = 0; i < count; i++) {
+            result[i] = expiredOrders[i];
+        }
+
+        return result;
+    }
 
     // View Functions
+    function getUserProfile(address user) external view returns (UserProfile memory) {
+        return users[user];
+    }
+
     function getUserDevices(address user) external view returns (uint256[] memory) {
         return userDevices[user];
     }
@@ -292,7 +358,6 @@ contract DeviceManagement {
     function getDevice(uint256 deviceId) external view returns (Device memory) {
         return devices[deviceId];
     }
-
 
     function getUserOrders(address user) external view returns (uint256[] memory) {
         return userOrders[user];
@@ -306,38 +371,51 @@ contract DeviceManagement {
         return orders[orderId];
     }
 
-    // function getActiveDevices() external view returns (uint256[] memory) {
-    //     uint256[] memory activeDevices = new uint256[](nextDeviceId);
-    //     uint256 count = 0;
+    function getActiveDevices() external view returns (uint256[] memory) {
+        uint256[] memory activeDevices = new uint256[](nextDeviceId);
+        uint256 count = 0;
 
-    //     for (uint256 i = 1; i <= nextDeviceId; i++) {
-    //         if (devices[i].isRegistered && devices[i].isActive) {
-    //             activeDevices[count] = i;
-    //             count++;
-    //         }
-    //     }
+        for (uint256 i = 1; i <= nextDeviceId; i++) {
+            if (devices[i].isActive) {
+                activeDevices[count] = i;
+                count++;
+            }
+        }
 
-    //     // Resize array to actual count
-    //     uint256[] memory result = new uint256[](count);
-    //     for (uint256 i = 0; i < count; i++) {
-    //         result[i] = activeDevices[i];
-    //     }
+        // Resize array to actual count
+        uint256[] memory result = new uint256[](count);
+        for (uint256 i = 0; i < count; i++) {
+            result[i] = activeDevices[i];
+        }
 
-    //     return result;
-    // }
+        return result;
+    }
 
-    // function getDeviceStats(uint256 deviceId)
-    //     external
-    //     view
-    //     deviceExists(deviceId)
-    //     returns (uint256 totalOrders, uint256 completedOrders, uint256 reputation)
-    // {
-    //     Device memory device = devices[deviceId];
-    //     return (device.totalOrders, device.completedOrders, device.reputation);
-    // }
+    function getReadyDevices() external view returns (uint256[] memory) {
+        uint256[] memory readyDevices = new uint256[](nextDeviceId);
+        uint256 count = 0;
+
+        for (uint256 i = 1; i <= nextDeviceId; i++) {
+            if (devices[i].isActive && devices[i].isReady) {
+                readyDevices[count] = i;
+                count++;
+            }
+        }
+
+        // Resize array to actual count
+        uint256[] memory result = new uint256[](count);
+        for (uint256 i = 0; i < count; i++) {
+            result[i] = readyDevices[i];
+        }
+
+        return result;
+    }
+
+    function getOrderEscrow(uint256 orderId) external view returns (uint256) {
+        return orderEscrow[orderId];
+    }
 
     // Admin Functions
-
     function updateTokenContract(address newTokenContract) external onlyAdmin {
         tokenContract = TokenTransfer(newTokenContract);
     }
@@ -345,5 +423,13 @@ contract DeviceManagement {
     // Emergency function to withdraw stuck tokens
     function emergencyWithdraw(uint256 amount) external onlyAdmin {
         require(tokenContract.transfer(admin, amount), "Emergency withdrawal failed");
+    }
+
+    // Function to fund contract with ETH for gas compensation
+    receive() external payable {}
+    
+    function withdraw(uint256 amount) external onlyAdmin {
+        require(address(this).balance >= amount, "Insufficient balance");
+        payable(admin).transfer(amount);
     }
 }
