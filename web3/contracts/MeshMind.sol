@@ -24,6 +24,7 @@ contract MeshMind {
         bool isReady; // New field to track if device is ready to accept orders
         uint256 pricePerHour;
         string[] capabilities;
+        string specs;
         uint256 totalOrders;
         uint256 completedOrders;
     }
@@ -31,7 +32,6 @@ contract MeshMind {
     struct Order {
         uint256 id;
         address user;
-        string action; // "data_access" or "compute_lease"
         uint256 deviceId;
         uint256 amount; // Paid amount
         uint256 timestamp;
@@ -146,7 +146,8 @@ contract MeshMind {
         string memory deviceName,
         string memory deviceIP,
         uint256 pricePerHour,
-        string[] memory capabilities
+        string[] memory capabilities,
+        string memory specs
     ) external userExists(msg.sender) {
         require(bytes(deviceName).length > 0, "Device name cannot be empty");
         require(pricePerHour > 0, "Price must be greater than 0");
@@ -161,6 +162,9 @@ contract MeshMind {
         newDevice.isReady = true;
         newDevice.pricePerHour = pricePerHour;
         newDevice.capabilities = capabilities;
+        newDevice.specs = specs;
+        newDevice.totalOrders = 0;
+        newDevice.completedOrders = 0;
 
         userDevices[msg.sender].push(deviceId);
 
@@ -225,7 +229,6 @@ contract MeshMind {
         orders[orderId] = Order({
             id: orderId,
             user: msg.sender,
-            action: action,
             deviceId: deviceId,
             amount: totalCost,
             timestamp: block.timestamp,
@@ -351,9 +354,17 @@ contract MeshMind {
         return users[user];
     }
 
-    function getUserDevices(address user) external view returns (uint256[] memory) {
-        return userDevices[user];
+    function getUserDevices(address user) external view returns (Device[] memory) {
+        uint256[] memory deviceIds = userDevices[user];
+        Device[] memory userDeviceList = new Device[](deviceIds.length);
+        
+        for (uint256 i = 0; i < deviceIds.length; i++) {
+            userDeviceList[i] = devices[deviceIds[i]];
+        }
+        
+        return userDeviceList;
     }
+    
 
     function getDevice(uint256 deviceId) external view returns (Device memory) {
         return devices[deviceId];
@@ -415,21 +426,6 @@ contract MeshMind {
         return orderEscrow[orderId];
     }
 
-    // Admin Functions
-    function updateTokenContract(address newTokenContract) external onlyAdmin {
-        tokenContract = TokenTransfer(newTokenContract);
-    }
-
-    // Emergency function to withdraw stuck tokens
-    function emergencyWithdraw(uint256 amount) external onlyAdmin {
-        require(tokenContract.transfer(admin, amount), "Emergency withdrawal failed");
-    }
-
-    // Function to fund contract with ETH for gas compensation
+    // Function to fund contract with tokens for gas compensation
     receive() external payable {}
-    
-    function withdraw(uint256 amount) external onlyAdmin {
-        require(address(this).balance >= amount, "Insufficient balance");
-        payable(admin).transfer(amount);
-    }
 }

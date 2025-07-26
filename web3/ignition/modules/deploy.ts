@@ -10,5 +10,5 @@ const DeployModule = buildModule("DeployModule", (m) => {
 
 export default DeployModule;
 
-// DeployModule#TokenTransfer - 0x1aC1aE30806e026Aa4e85e3938d847D11F2B7837
-// DeployModule#MeshMind - 0xeb2F26441508AeC79B506F01420d7785570ADf8b
+// DeployModule#TokenTransfer - 0x12743949e8D927f28724C40b72Dd179571Be0F33
+// DeployModule#MeshMind - 0xA8693c0Be587946bdd9dC2A718d3820AF43dFfA5
