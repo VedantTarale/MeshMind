@@ -515,6 +515,11 @@ export const contractABI = [
           "type": "uint256"
         },
         {
+          "internalType": "string",
+          "name": "specs",
+          "type": "string"
+        },
+        {
           "internalType": "uint256",
           "name": "totalOrders",
           "type": "uint256"
@@ -545,19 +550,6 @@ export const contractABI = [
         }
       ],
       "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "emergencyWithdraw",
-      "outputs": [],
-      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -634,6 +626,11 @@ export const contractABI = [
               "type": "string[]"
             },
             {
+              "internalType": "string",
+              "name": "specs",
+              "type": "string"
+            },
+            {
               "internalType": "uint256",
               "name": "totalOrders",
               "type": "uint256"
@@ -705,11 +702,6 @@ export const contractABI = [
               "internalType": "address",
               "name": "user",
               "type": "address"
-            },
-            {
-              "internalType": "string",
-              "name": "action",
-              "type": "string"
             },
             {
               "internalType": "uint256",
@@ -803,9 +795,61 @@ export const contractABI = [
       "name": "getUserDevices",
       "outputs": [
         {
-          "internalType": "uint256[]",
+          "components": [
+            {
+              "internalType": "string",
+              "name": "deviceName",
+              "type": "string"
+            },
+            {
+              "internalType": "string",
+              "name": "deviceIP",
+              "type": "string"
+            },
+            {
+              "internalType": "address",
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "internalType": "bool",
+              "name": "isActive",
+              "type": "bool"
+            },
+            {
+              "internalType": "bool",
+              "name": "isReady",
+              "type": "bool"
+            },
+            {
+              "internalType": "uint256",
+              "name": "pricePerHour",
+              "type": "uint256"
+            },
+            {
+              "internalType": "string[]",
+              "name": "capabilities",
+              "type": "string[]"
+            },
+            {
+              "internalType": "string",
+              "name": "specs",
+              "type": "string"
+            },
+            {
+              "internalType": "uint256",
+              "name": "totalOrders",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "completedOrders",
+              "type": "uint256"
+            }
+          ],
+          "internalType": "struct MeshMind.Device[]",
           "name": "",
-          "type": "uint256[]"
+          "type": "tuple[]"
         }
       ],
       "stateMutability": "view",
@@ -932,11 +976,6 @@ export const contractABI = [
           "type": "address"
         },
         {
-          "internalType": "string",
-          "name": "action",
-          "type": "string"
-        },
-        {
           "internalType": "uint256",
           "name": "deviceId",
           "type": "uint256"
@@ -1034,6 +1073,11 @@ export const contractABI = [
           "internalType": "string[]",
           "name": "capabilities",
           "type": "string[]"
+        },
+        {
+          "internalType": "string",
+          "name": "specs",
+          "type": "string"
         }
       ],
       "name": "registerDevice",
@@ -1161,19 +1205,6 @@ export const contractABI = [
       "inputs": [
         {
           "internalType": "address",
-          "name": "newTokenContract",
-          "type": "address"
-        }
-      ],
-      "name": "updateTokenContract",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
           "name": "",
           "type": "address"
         },
@@ -1245,19 +1276,6 @@ export const contractABI = [
         }
       ],
       "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "withdraw",
-      "outputs": [],
-      "stateMutability": "nonpayable",
       "type": "function"
     },
     {

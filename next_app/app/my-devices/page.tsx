@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
-import { Server, Settings, TrendingUp, Clock, DollarSign, Plus } from "lucide-react"
+import { Server, Settings, TrendingUp, Clock, Plus } from "lucide-react"
 import Link from "next/link"
 
 // Mock device data

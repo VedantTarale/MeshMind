@@ -8,13 +8,45 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/hooks/use-toast"
-import { User, Mail, Calendar, Star, Server, DollarSign, Clock, Settings, Plus, UserPlus, Wallet, Phone } from "lucide-react"
+import { User, Server, Clock, Plus, UserPlus, Wallet, Phone } from "lucide-react"
 import Link from "next/link"
 import { useAccount, useBalance } from 'wagmi';
 
 import { useReadContracts } from "wagmi"
 import { contractABI as abi} from "@/constants/abi"
 import { contractAddress } from "@/constants/contractAddress"
+
+
+
+interface UserProfile {
+  username: string;
+  contactInfo: string;
+  isRegistered: boolean;
+}
+
+interface Device {
+  deviceName: string;
+  deviceIP: string;
+  owner: string;
+  isActive: Boolean;
+  isReady: Boolean;
+  pricePerHour: Number;
+  capabilities: string;
+  totalOrders: Number;
+  completedOrders: Number;
+}
+
+interface Order {
+  action: string;
+  deviceId: string;
+  amount: string;
+  timestamp: string;
+  publicKey: string;
+  status: string;
+  completionTimestamp: string;
+  durationHours: string;
+  taskDetails: string;
+}
 
 // Mock user profile data
 const mockUserProfile = {
@@ -78,27 +110,35 @@ export default function ProfilePage() {
   const [devices, setDevices] = useState(mockDevices)
   const { toast } = useToast()
 
-  const { data, isLoading, isError, error } = useReadContracts({
+  const { data } = useReadContracts({
         contracts: [
             {
-                abi,
-                address: contractAddress,
-                functionName: 'getUserProfile',
-                args: [address],
+              abi,
+              address: contractAddress,
+              functionName: 'getUserProfile',
+              args: [address],
             },
             {
-                abi,
-                address: contractAddress,
-                functionName: 'getUserDevices',
-                args: [address],
+              abi,
+              address: contractAddress,
+              functionName: 'getUserDevices',
+              args: [address],
+            },
+            {
+              abi,
+              address: contractAddress,
+              functionName: 'getUserOrders',
+              args: [address],
             }
         ]
 
     });  
-  const userProfile = data?.[0]?.result;
-  const userDevices = data?.[1]?.result;
+  const userProfile = data?.[0]?.result as UserProfile | undefined;
+  const userDevices = data?.[1]?.result as Device[] | undefined;
+  const userOrders = data?.[2]?.result as Order[] | undefined;
+  console.table(userDevices);
   // TODO: Add actual profile checking logic here
-  const isProfilePresent = mockUserProfile.isRegistered
+  const isProfilePresent = userProfile || false;
 
   const toggleDeviceStatus = (deviceId: number) => {
     setDevices((prev) =>
@@ -113,7 +153,7 @@ export default function ProfilePage() {
   }
 
   // Registration prompt when profile doesn't exist
-  if (!isConnected) {
+  if (!isConnected || !isProfilePresent) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center py-12 px-4">
         <div className="max-w-2xl mx-auto text-center">
@@ -204,17 +244,10 @@ export default function ProfilePage() {
 
                 <Separator />
 
-                <div className="space-y-3">
-                  <h4 className="font-semibold"></h4>
-                  <p className="text-sm text-muted-foreground">{mockUserProfile.contactInfo}</p>
-                </div>
-
-                <Separator />
-
                 {/* Stats */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center p-3 bg-muted/50 rounded-lg">
-                    <div className="text-2xl font-bold text-green-600">${mockUserProfile.totalEarnings}</div>
+                    <div className="text-2xl font-bold text-green-600">{mockUserProfile.totalEarnings} SEI</div>
                     <div className="text-xs text-muted-foreground">Total Earnings</div>
                   </div>
                   <div className="text-center p-3 bg-muted/50 rounded-lg">
@@ -263,10 +296,9 @@ export default function ProfilePage() {
                     <div>
                       <p className="text-sm text-muted-foreground">Total Earnings</p>
                       <p className="text-2xl font-bold">
-                        ${devices.reduce((sum, d) => sum + d.totalEarnings, 0).toFixed(2)}
+                        {devices.reduce((sum, d) => sum + d.totalEarnings, 0).toFixed(2)} SEI
                       </p>
                     </div>
-                    <DollarSign className="h-8 w-8 text-green-600" />
                   </div>
                 </CardContent>
               </Card>
@@ -286,8 +318,8 @@ export default function ProfilePage() {
 
             {/* Device List */}
             <div className="space-y-4">
-              {devices.map((device) => (
-                <Card key={device.id} className="hover:shadow-md transition-shadow">
+              {mockDevices?.map((device, index) => (
+                <Card key={index} className="hover:shadow-md transition-shadow">
                   <CardContent className="pt-6">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
@@ -320,15 +352,11 @@ export default function ProfilePage() {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                       <div>
                         <span className="text-muted-foreground">Price/Hour:</span>
-                        <p className="font-semibold">${device.pricePerHour}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Reputation:</span>
-                        <p className="font-semibold">{device.reputation}/1000</p>
+                        <p className="font-semibold">{device.pricePerHour} SEI</p>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Earnings:</span>
-                        <p className="font-semibold">${device.totalEarnings}</p>
+                        <p className="font-semibold">{device.totalEarnings} SEI</p>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Success Rate:</span>

@@ -31,15 +31,20 @@ export function Navbar() {
       <Link href="/marketplace" className="text-sm font-medium hover:text-primary transition-colors">
         Marketplace
       </Link>
-      <Link href="/orders" className="text-sm font-medium hover:text-primary transition-colors">
-        Orders
+      <Link href="#about" className="text-sm font-medium hover:text-primary transition-colors">
+        About
       </Link>
-      <Link href="/my-devices" className="text-sm font-medium hover:text-primary transition-colors">
-        My Devices
-      </Link>
-      <Link href="/register-device" className="text-sm font-medium hover:text-primary transition-colors">
-        List Device
-      </Link>
+      { isConnected && (
+      <>
+        <Link href="/orders" className="text-sm font-medium hover:text-primary transition-colors">
+          Orders
+        </Link>
+        <Link href="/my-devices" className="text-sm font-medium hover:text-primary transition-colors">
+          My Devices
+        </Link>
+      </>
+      )}
+      
     </>
   )
 

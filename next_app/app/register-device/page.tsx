@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -12,6 +13,10 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { Server, X } from "lucide-react"
+
+import { useWriteContract } from "wagmi"
+import { contractABI as abi} from "@/constants/abi"
+import { contractAddress } from "@/constants/contractAddress"
 
 const availableCapabilities = [
   "GPU Computing",
@@ -29,18 +34,19 @@ const availableCapabilities = [
 ]
 
 export default function RegisterDevicePage() {
+  const { writeContract } = useWriteContract();
+  const router = useRouter();
   const [formData, setFormData] = useState({
     deviceName: "",
-    metadataURI: "",
     pricePerHour: "",
     specifications: "",
-    description: "",
+    deviceIP: "",
   })
   const [selectedCapabilities, setSelectedCapabilities] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (selectedCapabilities.length === 0) {
       toast({
@@ -52,24 +58,42 @@ export default function RegisterDevicePage() {
     }
 
     setIsLoading(true)
-
-    // Simulate device registration
-    setTimeout(() => {
+    try {
+      writeContract({
+        abi,
+        address: contractAddress,
+        functionName: "registerDevice",
+        args: [
+          formData.deviceName, 
+          formData.deviceIP, 
+          formData.pricePerHour,
+          selectedCapabilities, 
+          formData.specifications
+        ],
+      });
+      
+      console.log(selectedCapabilities);
+      
+      // Show success toast
       toast({
-        title: "Device Registered Successfully!",
-        description: "Your device is now listed in the marketplace and ready to receive orders.",
+        title: "Device Registration Successful",
+        description: "Your device has been registered successfully!",
+        variant: "default",
       })
+      
+      // Redirect to profile page
+      router.push("/profile");
+      
+    } catch (error) {
+      console.error("Error registering device:", error)
+      toast({
+        title: "Registration Failed",
+        description: "There was an error registering your device. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
       setIsLoading(false)
-      // Reset form
-      setFormData({
-        deviceName: "",
-        metadataURI: "",
-        pricePerHour: "",
-        specifications: "",
-        description: "",
-      })
-      setSelectedCapabilities([])
-    }, 2000)
+    }
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -129,18 +153,6 @@ export default function RegisterDevicePage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  name="description"
-                  placeholder="Describe your device's strengths and ideal use cases"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  rows={3}
-                />
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="pricePerHour">Price per Hour (in tokens)</Label>
                 <Input
                   id="pricePerHour"
@@ -156,12 +168,12 @@ export default function RegisterDevicePage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="metadataURI">Metadata URI (optional)</Label>
+                <Label htmlFor="metadataURI">Device IP</Label>
                 <Input
-                  id="metadataURI"
-                  name="metadataURI"
-                  placeholder="IPFS hash or URL for additional device metadata"
-                  value={formData.metadataURI}
+                  id="deviceIP"
+                  name="deviceIP"
+                  placeholder="IP of the device for remote access"
+                  value={formData.deviceIP}
                   onChange={handleInputChange}
                 />
               </div>
